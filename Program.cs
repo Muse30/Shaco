@@ -21,10 +21,88 @@ namespace Shaco
         public static Spell.Targeted E = new Spell.Targeted(SpellSlot.E, 625);
         public static Spell.Targeted R = new Spell.Targeted(SpellSlot.R, 2200);
         public static Spell.Active R2 = new Spell.Active(SpellSlot.R);
+        public static Spell.Targeted SmiteSpell;
+
+        public static Obj_AI_Base Monster;
+
+
+        public static readonly string[] SmiteableUnits =
+        {
+            "SRU_Red", "SRU_Blue", "SRU_Dragon", "SRU_Baron",
+            "SRU_Gromp", "SRU_Murkwolf", "SRU_Razorbeak",
+            "SRU_Krug", "Sru_Crab"
+        };
+
+        private static readonly int[] SmiteRed = { 3715, 1415, 1414, 1413, 1412 };
+        private static readonly int[] SmiteBlue = { 3706, 1403, 1402, 1401, 1400 };
+
         public static bool hasGhost = false;
         public static bool GhostDelay = false;
         public static int LastAATick;
         public static float cloneTime, lastBox;
+        public static bool isDangerousSpell(string spellName, Obj_AI_Base target, Obj_AI_Base hero, Vector3 end, float spellRange)
+                {
+            if (spellName == "CurseofTheSadMummy")
+            {
+                if (player.Distance(hero.Position) <= 600f)
+                {
+                    return true;
+                }
+            }
+            if (IsFacing(target, player.Position) &&
+                (spellName == "EnchantedCrystalArrow" || spellName == "rivenizunablade" ||
+                 spellName == "EzrealTrueshotBarrage" || spellName == "JinxR" || spellName == "sejuaniglacialprison"))
+            {
+                if (player.Distance(hero.Position) <= spellRange - 60)
+                {
+                    return true;
+                }
+            }
+            if (spellName == "InfernalGuardian" || spellName == "UFSlash" ||
+                (spellName == "RivenW" && player.HealthPercent< 25))
+            {
+                if (player.Distance(end) <= 270f)
+                {
+                    return true;
+                }
+            }
+            if (spellName == "BlindMonkRKick" || spellName == "SyndraR" || spellName == "VeigarPrimordialBurst" ||
+                spellName == "AlZaharNetherGrasp" || spellName == "LissandraR")
+            {
+                if (target.IsMe)
+                {
+                    return true;
+                }
+            }
+            if (spellName == "TristanaR" || spellName == "ViR")
+            {
+                if (target.IsMe || player.Distance(target.Position) <= 100f)
+                {
+                    return true;
+                }
+            }
+            if (spellName == "GalioIdolOfDurand")
+            {
+                if (player.Distance(hero.Position) <= 600f)
+                {
+                    return true;
+                }
+            }
+            if (target != null && target.IsMe)
+            {
+                if (isTargetedCC(spellName) && spellName != "NasusW" && spellName != "ZedUlt")
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool isTargetedCC(string Spellname)
+        {
+            return TargetedCC.Contains(Spellname);
+        }
+
 
         static void Main(string[] args)
         {
@@ -38,6 +116,7 @@ namespace Shaco
             Chat.Print("<font color='#9933FF'>Soresu </font><font color='#FFFFFF'>- Shaco</font>");
             Game.OnUpdate += Game_OnGameUpdate;
             Obj_AI_Base.OnProcessSpellCast += Obj_AI_Base_OnProcessSpellCast;
+            Game.OnUpdate += SmiteEvent;
         }
 
         private void Obj_AI_Base_OnProcessSpellCast(Obj_AI_Base hero, GameObjectProcessSpellCastEventArgs args)
@@ -56,6 +135,19 @@ namespace Shaco
                 }
                 LastAATick = Core.GameTickCount;
             }
+
+            if (args == null || hero == null)
+            {
+                return;
+            }
+            if (ComboMenu["usercc"].Cast<CheckBox>().CurrentValue && hero is AIHeroClient && hero.IsEnemy &&
+                player.Distance(hero) < Q.Range &&
+                isDangerousSpell(
+                    args.SData.Name, args.Target as AIHeroClient, hero, args.End, float.MaxValue))
+            {
+                R2.Cast();
+            }
+        
             if (hero.IsMe && args.SData.Name == "JackInTheBox")
             {
                 lastBox = System.Environment.TickCount;
@@ -83,6 +175,17 @@ namespace Shaco
                     "LissandraRSelf", "JudicatorIntervention", "ZacRebirthReady", "AatroxPassiveReady", "Rebirth",
                     "alistartrample", "NocturneShroudofDarknessShield", "SpellShield"
                 });
+
+                public static List<string> TargetedCC =
+                new List<string>(
+               new string[]
+                     {
+                    "TristanaR", "BlindMonkRKick", "AlZaharNetherGrasp", "VayneCondemn", "JayceThunderingBlow", "Headbutt",
+                    "Drain", "BlindingDart", "RunePrison", "IceBlast", "Dazzle", "Fling", "MaokaiUnstableGrowth",
+                    "MordekaiserChildrenOfTheGrave", "ZedUlt", "LuluW", "PantheonW", "ViR", "JudicatorReckoning",
+                    "IreliaEquilibriumStrike", "InfiniteDuress", "SkarnerImpale", "SowTheWind", "PuncturingTaunt",
+                    "UrgotSwap2", "NasusW", "VolibearW", "Feast", "NocturneUnspeakableHorror", "Terrify", "VeigarPrimordialBurst"
+                    });
         private void Game_OnGameUpdate(EventArgs args)
         {
             AIHeroClient target = TargetSelector.GetTarget(
@@ -386,7 +489,83 @@ namespace Shaco
             return (float)damage;
         }
 
-        public static Menu MenuPrincipal, ComboMenu, HarassMenu, MiscMenu;
+        public static void SetSmiteSlot()
+        {
+            SpellSlot smiteSlot;
+            if (SmiteBlue.Any(x => player.InventoryItems.FirstOrDefault(a => a.Id == (ItemId)x) != null))
+                smiteSlot = player.GetSpellSlotFromName("s5_summonersmiteplayerganker");
+            else if (
+                SmiteRed.Any(
+                    x => player.InventoryItems.FirstOrDefault(a => a.Id == (ItemId)x) != null))
+                smiteSlot = player.GetSpellSlotFromName("s5_summonersmiteduel");
+            else
+                smiteSlot = player.GetSpellSlotFromName("summonersmite");
+            SmiteSpell = new Spell.Targeted(smiteSlot, 500);
+        }
+
+        public static int GetSmiteDamage()
+        {
+            var level = player.Level;
+            int[] smitedamage =
+            {
+                20*level + 370,
+                30*level + 330,
+                40*level + 240,
+                50*level + 100
+            };
+            return smitedamage.Max();
+        }
+
+        private static void SmiteEvent(EventArgs args)
+        {
+            SetSmiteSlot();
+            if (!SmiteSpell.IsReady() || player.IsDead) return;
+            if (SmiteMenu["smiteActive"].Cast<KeyBind>().CurrentValue)
+            {
+                var unit =
+                    EntityManager.MinionsAndMonsters.Monsters
+                        .Where(
+                            a =>
+                                SmiteableUnits.Contains(a.BaseSkinName) && a.Health < GetSmiteDamage() &&
+                                SmiteMenu[a.BaseSkinName].Cast<CheckBox>().CurrentValue)
+                        .OrderByDescending(a => a.MaxHealth)
+                        .FirstOrDefault();
+
+                if (unit != null)
+                {
+                    SmiteSpell.Cast(unit);
+                    return;
+                }
+            }
+            if (SmiteMenu["useSlowSmite"].Cast<CheckBox>().CurrentValue &&
+                SmiteSpell.Handle.Name == "s5_summonersmiteplayerganker")
+            {
+                foreach (
+                    var target in
+                        EntityManager.Heroes.Enemies
+                            .Where(h => h.IsValidTarget(SmiteSpell.Range) && h.Health <= 20 + 8 * player.Level))
+                {
+                    SmiteSpell.Cast(target);
+                    return;
+                }
+            }
+            if (SmiteMenu["comboWithDuelSmite"].Cast<CheckBox>().CurrentValue &&
+                SmiteSpell.Handle.Name == "s5_summonersmiteduel" &&
+                Orbwalker.ActiveModesFlags.HasFlag(Orbwalker.ActiveModes.Combo))
+            {
+                foreach (
+                    var target in
+                        EntityManager.Heroes.Enemies
+                            .Where(h => h.IsValidTarget(SmiteSpell.Range)).OrderByDescending(TargetSelector.GetPriority)
+                    )
+                {
+                    SmiteSpell.Cast(target);
+                    return;
+                }
+            }
+        }
+
+        public static Menu MenuPrincipal, ComboMenu, HarassMenu, MiscMenu, SmiteMenu;
         private void InitMenu()
         {
             MenuPrincipal = MainMenu.AddMenu("Shaco", "Shaco");
@@ -396,6 +575,7 @@ namespace Shaco
             ComboMenu.Add("usew", new CheckBox("Use W"));
             ComboMenu.Add("usee", new CheckBox("Use E"));
             ComboMenu.Add("user", new CheckBox("Use R"));
+            ComboMenu.Add("usercc", new CheckBox("Dodge targeted cc"));
             ComboMenu.Add("useClone", new CheckBox("Move clone"));
             ComboMenu.Add("WaitForStealth", new CheckBox("Block spells in stealth"));
             ComboMenu.Add("useIgnite", new CheckBox("Use Ignite"));
@@ -410,6 +590,30 @@ namespace Shaco
             MiscMenu.Add("ksq", new CheckBox("KS E"));
             MiscMenu.Add("autoMoveClone", new CheckBox("Always move clone"));
             MiscMenu.Add("stackBox", new KeyBind("Stack boxes", false, KeyBind.BindTypes.HoldActive, "T".ToCharArray()[0]));
+
+
+            SmiteMenu = MenuPrincipal.AddSubMenu("Smite", "Smite");
+            SmiteMenu.AddSeparator();
+            SmiteMenu.Add("smiteActive",
+                new KeyBind("Smite Active (toggle)", true, KeyBind.BindTypes.PressToggle, 'H'));
+            SmiteMenu.AddSeparator();
+            SmiteMenu.Add("useSlowSmite", new CheckBox("KS with Blue Smite"));
+            SmiteMenu.Add("comboWithDuelSmite", new CheckBox("Combo with Red Smite"));
+            SmiteMenu.AddSeparator();
+            SmiteMenu.AddGroupLabel("Camps");
+            SmiteMenu.AddLabel("Epics");
+            SmiteMenu.Add("SRU_Baron", new CheckBox("Baron"));
+            SmiteMenu.Add("SRU_Dragon", new CheckBox("Dragon"));
+            SmiteMenu.AddLabel("Buffs");
+            SmiteMenu.Add("SRU_Blue", new CheckBox("Blue"));
+            SmiteMenu.Add("SRU_Red", new CheckBox("Red"));
+            SmiteMenu.AddLabel("Small Camps");
+            SmiteMenu.Add("SRU_Gromp", new CheckBox("Gromp", false));
+            SmiteMenu.Add("SRU_Murkwolf", new CheckBox("Murkwolf", false));
+            SmiteMenu.Add("SRU_Krug", new CheckBox("Krug", false));
+            SmiteMenu.Add("SRU_Razorbeak", new CheckBox("Razerbeak", false));
+            SmiteMenu.Add("Sru_Crab", new CheckBox("Skuttles", false));
+
         }
         public static void StringList(Menu menu, string uniqueId, string displayName, string[] values, int defaultValue)
         {
